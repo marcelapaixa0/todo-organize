@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import type { RecurrenceType } from "@/lib/types";
+import type { RecurrenceType, RecurrenceConfig } from "@/lib/types";
 
 type EventPayload = {
   title: string;
@@ -12,6 +12,7 @@ type EventPayload = {
   start_time: string;
   end_time: string;
   recurrence: RecurrenceType;
+  recurrence_config: RecurrenceConfig | null;
   reminder_minutes: number | null;
   participant_ids: string[];
 };
@@ -67,5 +68,37 @@ export async function updateEvent(eventId: string, payload: EventPayload) {
   }
 
   revalidatePath("/calendario");
+  return { success: true };
+}
+
+export async function deleteEvent(eventId: string) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("calendar_events")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", eventId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/calendario");
+  revalidatePath("/perfil");
+  return { success: true };
+}
+
+export async function restoreEvent(eventId: string) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("calendar_events")
+    .update({ deleted_at: null })
+    .eq("id", eventId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/calendario");
+  revalidatePath("/perfil");
   return { success: true };
 }

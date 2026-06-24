@@ -29,7 +29,10 @@ export default async function TarefasPage() {
         checklist_items:task_checklist_items(*, assignee:profiles(*))
       `)
       .eq("family_group_id", profile.family_group_id)
-      .neq("status", "done")
+      .eq("status", "todo")
+      .is("due_date", null)
+      .is("parent_task_id", null)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false }),
 
     supabase

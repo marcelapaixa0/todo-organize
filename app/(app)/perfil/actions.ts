@@ -3,6 +3,24 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
+export async function updateProfileColor(color: string) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ color })
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/perfil");
+  revalidatePath("/calendario");
+  revalidatePath("/tarefas");
+  return { success: true };
+}
+
 export async function createFamilyGroup(name: string) {
   const supabase = createClient();
 

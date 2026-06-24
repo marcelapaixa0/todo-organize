@@ -22,8 +22,12 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type recurrence_type as enum ('none', 'daily', 'weekly', 'monthly', 'yearly');
+  create type recurrence_type as enum ('none', 'daily', 'weekly', 'biweekly', 'monthly', 'yearly', 'custom');
 exception when duplicate_object then null; end $$;
+
+-- Migration (run once if enum already exists):
+-- ALTER TYPE recurrence_type ADD VALUE IF NOT EXISTS 'biweekly';
+-- ALTER TYPE recurrence_type ADD VALUE IF NOT EXISTS 'custom';
 
 -- ============================================================
 -- FAMILY GROUPS
@@ -45,8 +49,12 @@ create table if not exists profiles (
   family_group_id uuid references family_groups(id) on delete set null,
   name            text not null,
   avatar_url      text,
+  color           text not null default '#6366f1',
   created_at      timestamptz not null default now()
 );
+
+-- Migration (run once on existing databases):
+-- alter table profiles add column if not exists color text not null default '#6366f1';
 
 -- ============================================================
 -- CATEGORIES
@@ -64,20 +72,31 @@ create table if not exists categories (
 -- TASKS
 -- ============================================================
 create table if not exists tasks (
-  id              uuid primary key default gen_random_uuid(),
-  family_group_id uuid not null references family_groups(id) on delete cascade,
-  creator_id      uuid not null references profiles(id) on delete cascade,
-  title           text not null,
-  description     text,
-  visibility      visibility_type not null default 'public',
-  category_id     uuid not null references categories(id) on delete restrict,
-  priority        task_priority not null,
-  status          task_status not null default 'todo',
-  due_date        date,
-  completed_at    timestamptz,
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
+  id                uuid primary key default gen_random_uuid(),
+  family_group_id   uuid not null references family_groups(id) on delete cascade,
+  creator_id        uuid not null references profiles(id) on delete cascade,
+  parent_task_id    uuid references tasks(id) on delete set null,
+  title             text not null,
+  description       text,
+  visibility        visibility_type not null default 'public',
+  category_id       uuid not null references categories(id) on delete restrict,
+  priority          task_priority not null,
+  status            task_status not null default 'todo',
+  due_date          date,
+  recurrence        recurrence_type not null default 'none',
+  recurrence_config jsonb,
+  reminder_minutes  int,
+  completed_at      timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
 );
+
+-- Migrations (run once on existing databases):
+-- alter table tasks add column if not exists parent_task_id uuid references tasks(id) on delete set null;
+-- alter table tasks add column if not exists recurrence recurrence_type not null default 'none';
+-- alter table tasks add column if not exists recurrence_config jsonb;
+-- alter table tasks add column if not exists reminder_minutes int;
+-- alter table tasks add column if not exists deleted_at timestamptz;
 
 -- ============================================================
 -- TASK ASSIGNEES (many-to-many)
@@ -86,6 +105,28 @@ create table if not exists task_assignees (
   task_id    uuid not null references tasks(id) on delete cascade,
   profile_id uuid not null references profiles(id) on delete cascade,
   primary key (task_id, profile_id)
+);
+
+-- ============================================================
+-- TASK COMMENTS
+-- ============================================================
+create table if not exists task_comments (
+  id         uuid primary key default gen_random_uuid(),
+  task_id    uuid not null references tasks(id) on delete cascade,
+  profile_id uuid not null references profiles(id) on delete cascade,
+  text       text not null,
+  created_at timestamptz not null default now()
+);
+
+-- ============================================================
+-- TASK EDIT HISTORY
+-- ============================================================
+create table if not exists task_edit_history (
+  id         uuid primary key default gen_random_uuid(),
+  task_id    uuid not null references tasks(id) on delete cascade,
+  changed_by uuid not null references profiles(id) on delete cascade,
+  changes    jsonb not null,
+  changed_at timestamptz not null default now()
 );
 
 -- ============================================================
@@ -126,11 +167,16 @@ create table if not exists calendar_events (
   date             date not null,
   start_time       time not null,
   end_time         time not null,
-  recurrence       recurrence_type not null default 'none',
-  reminder_minutes int,
+  recurrence         recurrence_type not null default 'none',
+  recurrence_config  jsonb,
+  reminder_minutes   int,
+  deleted_at       timestamptz,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
+
+-- Migration (run once on existing databases):
+-- alter table calendar_events add column if not exists deleted_at timestamptz;
 
 -- ============================================================
 -- EVENT PARTICIPANTS (many-to-many)
@@ -309,6 +355,22 @@ drop policy if exists "group members see date history" on task_date_history;
 drop policy if exists "system inserts date history"    on task_date_history;
 create policy "group members see date history" on task_date_history for select using (exists (select 1 from tasks t where t.id = task_id and t.family_group_id = my_family_group_id()));
 create policy "system inserts date history"    on task_date_history for insert with check (true);
+
+-- task_comments
+alter table task_comments enable row level security;
+drop policy if exists "group members see task comments"    on task_comments;
+drop policy if exists "group members insert task comments" on task_comments;
+drop policy if exists "author deletes own comment"         on task_comments;
+create policy "group members see task comments"    on task_comments for select using (exists (select 1 from tasks t where t.id = task_id and t.family_group_id = my_family_group_id()));
+create policy "group members insert task comments" on task_comments for insert with check (exists (select 1 from tasks t where t.id = task_id and t.family_group_id = my_family_group_id()));
+create policy "author deletes own comment"         on task_comments for delete using (profile_id = my_profile_id());
+
+-- task_edit_history
+alter table task_edit_history enable row level security;
+drop policy if exists "group members see edit history"    on task_edit_history;
+drop policy if exists "system inserts edit history"       on task_edit_history;
+create policy "group members see edit history"    on task_edit_history for select using (exists (select 1 from tasks t where t.id = task_id and t.family_group_id = my_family_group_id()));
+create policy "system inserts edit history"       on task_edit_history for insert with check (true);
 
 -- calendar_events
 drop policy if exists "group members see public events" on calendar_events;

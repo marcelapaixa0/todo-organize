@@ -16,43 +16,34 @@ export default async function CalendarioPage() {
 
   if (!profile?.family_group_id) redirect("/perfil");
 
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth() + 1;
-  const firstDay = `${year}-${String(month).padStart(2, "0")}-01`;
-  const lastDay = `${year}-${String(month).padStart(2, "0")}-31`;
-
-  const [eventsRes, tasksRes, membersRes] = await Promise.all([
-    supabase
-      .from("calendar_events")
-      .select("*, participants:event_participants(profile:profiles(*))")
-      .eq("family_group_id", profile.family_group_id)
-      .gte("date", firstDay)
-      .lte("date", lastDay)
-      .order("date")
-      .order("start_time"),
-
+  const [tasksRes, categoriesRes, membersRes, eventsRes] = await Promise.all([
     supabase
       .from("tasks")
       .select("*, category:categories(*), assignees:task_assignees(profile:profiles(*))")
       .eq("family_group_id", profile.family_group_id)
-      .not("due_date", "is", null)
-      .gte("due_date", firstDay)
-      .lte("due_date", lastDay)
-      .neq("status", "done"),
+      .is("parent_task_id", null)
+      .is("deleted_at", null)
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false }),
+
+    supabase
+      .from("categories")
+      .select("*")
+      .eq("family_group_id", profile.family_group_id)
+      .order("name"),
 
     supabase
       .from("profiles")
       .select("*")
       .eq("family_group_id", profile.family_group_id),
-  ]);
 
-  const events = (eventsRes.data ?? []).map((e: any) => ({
-    ...e,
-    participants: (e.participants ?? [])
-      .map((p: any) => (Array.isArray(p.profile) ? p.profile[0] : p.profile))
-      .filter(Boolean),
-  }));
+    supabase
+      .from("calendar_events")
+      .select("*, participants:event_participants(profile:profiles(*))")
+      .eq("family_group_id", profile.family_group_id)
+      .is("deleted_at", null)
+      .order("date", { ascending: true }),
+  ]);
 
   const tasks = (tasksRes.data ?? []).map((t: any) => ({
     ...t,
@@ -62,10 +53,18 @@ export default async function CalendarioPage() {
       .filter(Boolean),
   }));
 
+  const events = (eventsRes.data ?? []).map((e: any) => ({
+    ...e,
+    participants: (e.participants ?? [])
+      .map((p: any) => (Array.isArray(p.profile) ? p.profile[0] : p.profile))
+      .filter(Boolean),
+  }));
+
   return (
     <CalendarioClient
-      events={events}
       tasks={tasks}
+      events={events}
+      categories={categoriesRes.data ?? []}
       members={membersRes.data ?? []}
       currentProfile={profile}
     />
