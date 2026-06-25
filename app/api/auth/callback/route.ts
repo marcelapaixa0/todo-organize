@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { supabaseUrl, supabaseAnonKey } from "@/lib/supabase/config";
+import { getSupabaseConfig } from "@/lib/supabase/config";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -10,23 +10,20 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const response = NextResponse.redirect(`${origin}/tarefas`);
+    const { url, anonKey } = getSupabaseConfig();
 
-    const supabase = createServerClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              response.cookies.set(name, value, options);
-            });
-          },
+    const supabase = createServerClient(url, anonKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
         },
-      }
-    );
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    });
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     console.log("[callback] exchangeCodeForSession error:", error?.message ?? "none");
