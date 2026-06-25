@@ -5,10 +5,10 @@ import { useState } from "react";
 
 export default function LoginClient() {
   const [loading, setLoading] = useState(false);
-  const supabase = createClient();
 
   async function handleGoogleLogin() {
     setLoading(true);
+    const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
