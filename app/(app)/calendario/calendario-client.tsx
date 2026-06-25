@@ -138,10 +138,6 @@ export default function CalendarioClient({ tasks, events, categories, members, c
     });
   }
 
-  async function handleDeleteTask(task: Task) {
-    startTransition(() => { void deleteTask(task.id); });
-  }
-
   async function handleBulkAdvance() {
     const ids = Array.from(selectedIds);
     await bulkAdvanceStatus(ids);

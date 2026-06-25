@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import CalendarioClient from "./calendario-client";
+import type { Task, CalendarEvent } from "@/lib/types";
 
 export default async function CalendarioPage() {
   const supabase = createClient();
@@ -45,20 +46,24 @@ export default async function CalendarioPage() {
       .order("date", { ascending: true }),
   ]);
 
-  const tasks = (tasksRes.data ?? []).map((t: any) => ({
+  type RawRef = { profile: unknown };
+  type RawTaskRow = { category: unknown; assignees: RawRef[] | null; [key: string]: unknown };
+  type RawEventRow = { participants: RawRef[] | null; [key: string]: unknown };
+
+  const tasks = ((tasksRes.data ?? []) as RawTaskRow[]).map((t) => ({
     ...t,
     category: Array.isArray(t.category) ? t.category[0] ?? null : t.category,
     assignees: (t.assignees ?? [])
-      .map((a: any) => (Array.isArray(a.profile) ? a.profile[0] : a.profile))
+      .map((a) => (Array.isArray(a.profile) ? (a.profile as unknown[])[0] : a.profile))
       .filter(Boolean),
-  }));
+  })) as Task[];
 
-  const events = (eventsRes.data ?? []).map((e: any) => ({
+  const events = ((eventsRes.data ?? []) as RawEventRow[]).map((e) => ({
     ...e,
     participants: (e.participants ?? [])
-      .map((p: any) => (Array.isArray(p.profile) ? p.profile[0] : p.profile))
+      .map((p) => (Array.isArray(p.profile) ? (p.profile as unknown[])[0] : p.profile))
       .filter(Boolean),
-  }));
+  })) as CalendarEvent[];
 
   return (
     <CalendarioClient

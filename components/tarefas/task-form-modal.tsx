@@ -95,7 +95,7 @@ function formatHistoryValue(
 }
 
 export default function TaskFormModal({
-  task, categories, members, currentProfile: _currentProfile, defaultDate, onClose, onDelete,
+  task, categories, members, defaultDate, onClose, onDelete,
 }: Props) {
   const supabase = createClient();
   const isEditing = !!task;

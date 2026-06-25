@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import PerfilClient from "./perfil-client";
+import type { Profile, Category } from "@/lib/types";
+
+type DeletedTask = { id: string; title: string; deleted_at: string; category?: { name: string; color: string } | null };
+type DeletedEvent = { id: string; title: string; deleted_at: string; date: string };
 
 export default async function PerfilPage() {
   const supabase = createClient();
@@ -15,10 +19,10 @@ export default async function PerfilPage() {
     .single();
 
   let familyGroup = null;
-  let members: any[] = [];
-  let categories: any[] = [];
-  let deletedTasks: any[] = [];
-  let deletedEvents: any[] = [];
+  let members: Profile[] = [];
+  let categories: Category[] = [];
+  let deletedTasks: DeletedTask[] = [];
+  let deletedEvents: DeletedEvent[] = [];
 
   if (profile?.family_group_id) {
     const [groupRes, membersRes, categoriesRes, deletedTasksRes, deletedEventsRes] = await Promise.all([
@@ -31,11 +35,11 @@ export default async function PerfilPage() {
     familyGroup = groupRes.data;
     members = membersRes.data ?? [];
     categories = categoriesRes.data ?? [];
-    deletedTasks = (deletedTasksRes.data ?? []).map((t: any) => ({
+    deletedTasks = ((deletedTasksRes.data ?? []) as Array<DeletedTask & { category: unknown }>).map((t) => ({
       ...t,
-      category: Array.isArray(t.category) ? t.category[0] ?? null : t.category,
+      category: Array.isArray(t.category) ? (t.category as Array<{ name: string; color: string }>)[0] ?? null : t.category as { name: string; color: string } | null,
     }));
-    deletedEvents = deletedEventsRes.data ?? [];
+    deletedEvents = (deletedEventsRes.data ?? []) as DeletedEvent[];
   }
 
   return (

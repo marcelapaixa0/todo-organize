@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import TarefasClient from "./tarefas-client";
-import type { Task, Profile, Category } from "@/lib/types";
+import type { Task, Profile } from "@/lib/types";
 
 export default async function TarefasPage() {
   const supabase = createClient();
@@ -47,14 +47,18 @@ export default async function TarefasPage() {
       .eq("family_group_id", profile.family_group_id),
   ]);
 
-  const tasks = (tasksRes.data ?? []).map((t: any) => ({
+  type RawRef = { profile: unknown };
+  type RawCI = { assignee: unknown; [key: string]: unknown };
+  type RawTaskRow = { category: unknown; assignees: RawRef[] | null; checklist_items: RawCI[] | null; [key: string]: unknown };
+
+  const tasks = ((tasksRes.data ?? []) as RawTaskRow[]).map((t) => ({
     ...t,
-    assignees: (t.assignees ?? []).map((a: any) => (Array.isArray(a.profile) ? a.profile[0] : a.profile)).filter(Boolean),
-    checklist_items: (t.checklist_items ?? []).map((ci: any) => ({
+    assignees: (t.assignees ?? []).map((a) => (Array.isArray(a.profile) ? (a.profile as unknown[])[0] : a.profile)).filter(Boolean),
+    checklist_items: (t.checklist_items ?? []).map((ci) => ({
       ...ci,
-      assignee: Array.isArray(ci.assignee) ? ci.assignee[0] ?? null : ci.assignee,
+      assignee: Array.isArray(ci.assignee) ? (ci.assignee as unknown[])[0] ?? null : ci.assignee,
     })),
-    category: Array.isArray(t.category) ? t.category[0] ?? null : t.category,
+    category: Array.isArray(t.category) ? (t.category as unknown[])[0] ?? null : t.category,
   })) as Task[];
 
   return (
