@@ -307,12 +307,15 @@ $$;
 -- ============================================================
 
 -- family_groups
-drop policy if exists "member sees own group"    on family_groups;
-drop policy if exists "member updates own group" on family_groups;
-drop policy if exists "anyone can create group"  on family_groups;
-create policy "member sees own group"    on family_groups for select using (id = my_family_group_id());
-create policy "member updates own group" on family_groups for update using (id = my_family_group_id());
-create policy "anyone can create group"  on family_groups for insert with check (auth.uid() is not null);
+drop policy if exists "member sees own group"         on family_groups;
+drop policy if exists "auth user lookup by invite"    on family_groups;
+drop policy if exists "member updates own group"      on family_groups;
+drop policy if exists "anyone can create group"       on family_groups;
+-- members can see their own group; any authenticated user can look up a group by invite_code (needed to join)
+create policy "member sees own group"         on family_groups for select using (id = my_family_group_id());
+create policy "auth user lookup by invite"    on family_groups for select using (auth.uid() is not null);
+create policy "member updates own group"      on family_groups for update using (id = my_family_group_id());
+create policy "anyone can create group"       on family_groups for insert with check (auth.uid() is not null);
 
 -- profiles
 drop policy if exists "members see group profiles" on profiles;

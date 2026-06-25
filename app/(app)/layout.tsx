@@ -9,8 +9,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/entrar");
 
   return (
-    <div className="min-h-screen flex flex-col max-w-2xl mx-auto">
-      <main className="flex-1 pb-safe overflow-y-auto">
+    <div className="h-dvh flex flex-col max-w-2xl mx-auto overflow-hidden">
+      <main className="flex-1 overflow-y-auto">
         {children}
       </main>
       <BottomNav />

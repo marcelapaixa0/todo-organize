@@ -343,7 +343,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
   return (
     <div className="flex flex-col h-full">
       {/* Sticky header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 pt-4 pb-3">
+      <div className="sticky top-0 z-10 bg-white px-4 pt-4 pb-0">
         {/* Title + add button */}
         <div className="flex items-center justify-between mb-3">
           {selectMode ? (
@@ -517,11 +517,10 @@ export default function CalendarioClient({ tasks, events, categories, members, c
             })}
           </div>
         )}
-      </div>
 
-      {/* Filter bar — single scrollable row */}
+      {/* Filter bar */}
       <div
-        className="flex items-center gap-2 px-4 pt-2.5 pb-2.5 border-b border-slate-100 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+        className="flex items-center gap-2 -mx-4 px-4 pt-2.5 pb-2.5 border-b border-slate-100 overflow-x-auto [&::-webkit-scrollbar]:hidden"
         style={{ scrollbarWidth: "none" }}
       >
         <select
@@ -570,6 +569,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
           <option value="medium">Média</option>
           <option value="low">Baixa</option>
         </select>
+      </div>
       </div>
 
       {/* Agenda */}

@@ -231,7 +231,7 @@ export default function TarefasClient({ tasks, categories, members, currentProfi
       </div>
 
       {/* Task list */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-36">
+      <div className={`flex-1 overflow-y-auto px-4 py-3 space-y-3 ${selectMode ? 'pb-72' : 'pb-36'}`}>
         {visibleTasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
             <svg className="w-12 h-12 mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
