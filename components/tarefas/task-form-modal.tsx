@@ -95,7 +95,7 @@ function formatHistoryValue(
 }
 
 export default function TaskFormModal({
-  task, categories, members, currentProfile, defaultDate, onClose, onDelete,
+  task, categories, members, currentProfile: _currentProfile, defaultDate, onClose, onDelete,
 }: Props) {
   const supabase = createClient();
   const isEditing = !!task;
@@ -139,7 +139,7 @@ export default function TaskFormModal({
       .eq("task_id", task.id)
       .order("changed_at", { ascending: false });
     setHistory(
-      (data ?? []).map((h: any) => ({
+      (data ?? []).map((h: TaskEditHistory & { changer: Profile | Profile[] | null }) => ({
         ...h,
         changer: Array.isArray(h.changer) ? h.changer[0] : h.changer,
       }))
