@@ -13,6 +13,7 @@ export default function MemberAvatar({ name, avatarUrl }: Props) {
 
   if (avatarUrl && !errored) {
     return (
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={avatarUrl}
         alt={name}
