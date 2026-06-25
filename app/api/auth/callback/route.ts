@@ -5,9 +5,9 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
 
+  console.log("[callback] origin:", origin, "| code present:", !!code);
+
   if (code) {
-    // A resposta do redirect precisa ser criada ANTES de setar os cookies,
-    // para que o supabase client escreva os cookies diretamente nela.
     const response = NextResponse.redirect(`${origin}/tarefas`);
 
     const supabase = createServerClient(
@@ -28,8 +28,11 @@ export async function GET(request: NextRequest) {
     );
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+    console.log("[callback] exchangeCodeForSession error:", error?.message ?? "none");
     if (!error) return response;
+    return NextResponse.redirect(`${origin}/entrar?error=${encodeURIComponent(error.message)}`);
   }
 
+  console.log("[callback] no code — redirecting to /entrar");
   return NextResponse.redirect(`${origin}/entrar`);
 }
