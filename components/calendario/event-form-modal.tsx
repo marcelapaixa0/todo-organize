@@ -207,7 +207,7 @@ export default function EventFormModal({ event, members, defaultDate, onClose, o
         </div>
 
         {/* Conteúdo rolável */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-4 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
 
           {/* Título */}
