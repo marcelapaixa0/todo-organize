@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createEvent, updateEvent } from "@/app/(app)/calendario/actions";
 import type { CalendarEvent, Profile, RecurrenceType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -95,6 +95,14 @@ export default function EventFormModal({ event, members, defaultDate, onClose, o
     event?.recurrence_config?.unit ?? "week"
   );
 
+  // Trava o scroll da página por trás enquanto o modal está aberto,
+  // evitando que o gesto de rolar dentro do modal "vaze" para o app.
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = original; };
+  }, []);
+
   // ─── Helpers ───────────────────────────────────────────────
   function toggleParticipant(id: string) {
     setParticipantIds((prev) =>
@@ -164,7 +172,7 @@ export default function EventFormModal({ event, members, defaultDate, onClose, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-xl max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-xl max-h-[90vh] overflow-y-auto overscroll-contain">
         <div className="flex justify-center pt-3 pb-1 sm:hidden">
           <div className="w-10 h-1 bg-slate-200 rounded-full" />
         </div>
