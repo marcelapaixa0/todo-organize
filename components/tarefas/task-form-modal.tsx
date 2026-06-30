@@ -222,7 +222,7 @@ export default function TaskFormModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-xl max-h-[92vh] flex flex-col">
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">

@@ -171,7 +171,7 @@ export default function EventFormModal({ event, members, defaultDate, onClose, o
   const dayOfMonth = date ? getDayOfMonth(date) : 1;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-xl max-h-[90dvh] flex flex-col"
