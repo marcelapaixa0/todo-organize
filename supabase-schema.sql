@@ -165,8 +165,8 @@ create table if not exists calendar_events (
   description      text,
   visibility       visibility_type not null default 'public',
   date             date not null,
-  start_time       time not null,
-  end_time         time not null,
+  start_time       time,
+  end_time         time,
   recurrence         recurrence_type not null default 'none',
   recurrence_config  jsonb,
   reminder_minutes   int,
@@ -177,6 +177,8 @@ create table if not exists calendar_events (
 
 -- Migration (run once on existing databases):
 -- alter table calendar_events add column if not exists deleted_at timestamptz;
+-- alter table calendar_events alter column start_time drop not null;
+-- alter table calendar_events alter column end_time drop not null;
 
 -- ============================================================
 -- EVENT PARTICIPANTS (many-to-many)

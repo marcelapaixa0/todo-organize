@@ -9,8 +9,8 @@ type EventPayload = {
   description: string | null;
   visibility: "public" | "private";
   date: string;
-  start_time: string;
-  end_time: string;
+  start_time: string | null;
+  end_time: string | null;
   recurrence: RecurrenceType;
   recurrence_config: RecurrenceConfig | null;
   reminder_minutes: number | null;

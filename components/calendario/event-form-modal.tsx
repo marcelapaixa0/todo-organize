@@ -17,7 +17,7 @@ const PERIOD_TIMES: Record<Period, { start: string; end: string }> = {
 };
 const PERIOD_ICONS: Record<Period, string> = { manha: "🌅", tarde: "☀️", noite: "🌙" };
 
-function timeToPeriod(startTime?: string): Period {
+function timeToPeriod(startTime?: string | null): Period {
   if (!startTime) return "manha";
   const h = parseInt(startTime.slice(0, 2), 10);
   if (h >= 18) return "noite";
@@ -61,6 +61,7 @@ function eventRecurrenceToFreq(r: string): RecurrenceFreq | null {
 // ─── Props ────────────────────────────────────────────────────
 type Props = {
   event?: CalendarEvent | null;
+  events?: CalendarEvent[];
   members: Profile[];
   currentProfile: Profile;
   defaultDate?: string;
@@ -68,13 +69,16 @@ type Props = {
   onDelete?: () => void;
 };
 
-export default function EventFormModal({ event, members, defaultDate, onClose, onDelete }: Props) {
+export default function EventFormModal({ event, events = [], members, defaultDate, onClose, onDelete }: Props) {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState("");
+  const [conflictMessage, setConflictMessage] = useState("");
 
   // Campos básicos
   const [title, setTitle]   = useState(event?.title ?? "");
   const [date, setDate]     = useState(event?.date ?? defaultDate ?? "");
+  const [visibility, setVisibility] = useState<"public" | "private">(event?.visibility ?? "public");
+  const [hasTime, setHasTime] = useState(Boolean(event?.start_time && event?.end_time));
   const [period, setPeriod] = useState<Period>(timeToPeriod(event?.start_time));
   const [participantIds, setParticipantIds] = useState<string[]>(
     event?.participants?.map((p) => p.id) ?? []
@@ -124,8 +128,20 @@ export default function EventFormModal({ event, members, defaultDate, onClose, o
     }
   }
 
+  // ─── Conflito de horário ─────────────────────────────────────
+  function findConflicts(start: string, end: string): CalendarEvent[] {
+    return events.filter((e) => {
+      if (event && e.id === event.id) return false;
+      if (e.date.slice(0, 10) !== date) return false;
+      if (!e.start_time || !e.end_time) return false;
+      const sharesParticipant = (e.participants ?? []).some((p) => participantIds.includes(p.id));
+      if (!sharesParticipant) return false;
+      return start < e.end_time && e.start_time < end;
+    });
+  }
+
   // ─── Submit ────────────────────────────────────────────────
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent, skipConflictCheck = false) {
     e.preventDefault();
     if (!title.trim())             { setError("O título é obrigatório."); return; }
     if (!date)                     { setError("A data é obrigatória."); return; }
@@ -135,10 +151,21 @@ export default function EventFormModal({ event, members, defaultDate, onClose, o
       return;
     }
 
-    setError("");
-    setLoading(true);
+    const { start, end } = hasTime ? PERIOD_TIMES[period] : { start: null, end: null };
 
-    const { start, end } = PERIOD_TIMES[period];
+    if (!skipConflictCheck && start && end) {
+      const conflicts = findConflicts(start, end);
+      if (conflicts.length > 0) {
+        setConflictMessage(
+          `Conflito de horário com "${conflicts.map((c) => c.title).join(", ")}". Deseja salvar mesmo assim?`
+        );
+        return;
+      }
+    }
+
+    setError("");
+    setConflictMessage("");
+    setLoading(true);
 
     const recurrenceConfig =
       recurrenceFreq === "custom"
@@ -148,7 +175,7 @@ export default function EventFormModal({ event, members, defaultDate, onClose, o
     const payload = {
       title: title.trim(),
       description: null,
-      visibility: "public" as const,
+      visibility,
       date,
       start_time: start,
       end_time: end,
@@ -209,6 +236,18 @@ export default function EventFormModal({ event, members, defaultDate, onClose, o
         {/* Conteúdo rolável */}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 pb-4 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
+          {conflictMessage && (
+            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 space-y-2">
+              <p>{conflictMessage}</p>
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e as unknown as React.FormEvent, true)}
+                className="text-xs font-semibold text-amber-800 underline"
+              >
+                Salvar mesmo assim
+              </button>
+            </div>
+          )}
 
           {/* Título */}
           <div className="space-y-2">
@@ -232,27 +271,77 @@ export default function EventFormModal({ event, members, defaultDate, onClose, o
             />
           </div>
 
+          {/* Visibilidade */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Visibilidade</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setVisibility("public")}
+                className={cn(
+                  "py-2.5 rounded-xl border-2 text-xs font-medium transition-colors",
+                  visibility === "public"
+                    ? "bg-violet-600 text-white border-violet-600"
+                    : "bg-white text-slate-600 border-slate-200"
+                )}
+              >
+                🌐 Público (grupo familiar)
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisibility("private")}
+                className={cn(
+                  "py-2.5 rounded-xl border-2 text-xs font-medium transition-colors",
+                  visibility === "private"
+                    ? "bg-violet-600 text-white border-violet-600"
+                    : "bg-white text-slate-600 border-slate-200"
+                )}
+              >
+                🔒 Privado (só eu)
+              </button>
+            </div>
+          </div>
+
           {/* Período */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Período *</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["manha", "tarde", "noite"] as Period[]).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPeriod(p)}
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-700">Horário</label>
+              <button
+                type="button"
+                onClick={() => setHasTime((prev) => !prev)}
+                className={cn(
+                  "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
+                  hasTime ? "bg-violet-600" : "bg-slate-200"
+                )}
+              >
+                <span
                   className={cn(
-                    "flex flex-col items-center gap-1 py-3 rounded-xl border-2 text-xs font-medium transition-colors",
-                    period === p
-                      ? "bg-violet-600 text-white border-violet-600"
-                      : "bg-white text-slate-600 border-slate-200"
+                    "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                    hasTime ? "translate-x-6" : "translate-x-1"
                   )}
-                >
-                  <span className="text-lg">{PERIOD_ICONS[p]}</span>
-                  {PERIOD_LABELS[p]}
-                </button>
-              ))}
+                />
+              </button>
             </div>
+            {hasTime && (
+              <div className="grid grid-cols-3 gap-2">
+                {(["manha", "tarde", "noite"] as Period[]).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPeriod(p)}
+                    className={cn(
+                      "flex flex-col items-center gap-1 py-3 rounded-xl border-2 text-xs font-medium transition-colors",
+                      period === p
+                        ? "bg-violet-600 text-white border-violet-600"
+                        : "bg-white text-slate-600 border-slate-200"
+                    )}
+                  >
+                    <span className="text-lg">{PERIOD_ICONS[p]}</span>
+                    {PERIOD_LABELS[p]}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ── Recorrência ── */}

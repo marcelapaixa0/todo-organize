@@ -54,7 +54,8 @@ const PERIOD_LABELS: Record<string, string> = {
   "18:00": "Noite",
 };
 
-function periodLabel(startTime: string) {
+function periodLabel(startTime: string | null) {
+  if (!startTime) return "Dia inteiro";
   return PERIOD_LABELS[startTime] ?? startTime;
 }
 
@@ -816,6 +817,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
       {showEventForm && (
         <EventFormModal
           event={editingEvent}
+          events={events}
           members={members}
           currentProfile={currentProfile}
           defaultDate={defaultDate}
