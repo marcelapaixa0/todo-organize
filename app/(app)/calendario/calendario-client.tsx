@@ -20,8 +20,11 @@ import {
   subWeeks,
   addDays,
   subDays,
+  addYears,
   isSameMonth,
   isSameWeek,
+  isAfter,
+  differenceInCalendarWeeks,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Task, CalendarEvent, Profile, Category, TaskStatus } from "@/lib/types";
@@ -61,6 +64,69 @@ function periodLabel(startTime: string | null) {
 
 function isBacklog(task: Task) {
   return task.status === "todo" && !task.due_date && (task.assignees?.length ?? 0) === 0;
+}
+
+// Expands recurring events into one virtual occurrence per matching day within [rangeStart, rangeEnd].
+// Non-recurring events are returned as-is (their single `date` is already correct).
+function expandEventOccurrences(events: CalendarEvent[], rangeStart: Date, rangeEnd: Date): CalendarEvent[] {
+  const occurrences: CalendarEvent[] = [];
+
+  for (const ev of events) {
+    if (!ev.recurrence || ev.recurrence === "none") {
+      occurrences.push(ev);
+      continue;
+    }
+
+    const baseDate = parseISO(ev.date);
+    const config = ev.recurrence_config;
+    const interval = Math.max(1, config?.interval ?? (ev.recurrence === "biweekly" ? 2 : 1));
+    const unit = config?.unit ?? (ev.recurrence === "monthly" ? "month" : "week");
+
+    if (ev.recurrence === "monthly" || (ev.recurrence === "custom" && unit === "month")) {
+      let cursor = baseDate;
+      let guard = 0;
+      while (!isAfter(cursor, rangeEnd) && guard < 240) {
+        if (!isBefore(cursor, rangeStart) || isSameDay(cursor, rangeStart)) {
+          occurrences.push({ ...ev, date: format(cursor, "yyyy-MM-dd") });
+        }
+        cursor = addMonths(cursor, interval);
+        guard++;
+      }
+    } else if (ev.recurrence === "yearly") {
+      let cursor = baseDate;
+      let guard = 0;
+      while (!isAfter(cursor, rangeEnd) && guard < 50) {
+        if (!isBefore(cursor, rangeStart) || isSameDay(cursor, rangeStart)) {
+          occurrences.push({ ...ev, date: format(cursor, "yyyy-MM-dd") });
+        }
+        cursor = addYears(cursor, interval);
+        guard++;
+      }
+    } else if (ev.recurrence === "daily") {
+      let cursor = isBefore(baseDate, rangeStart) ? rangeStart : baseDate;
+      let guard = 0;
+      while (!isAfter(cursor, rangeEnd) && guard < 730) {
+        occurrences.push({ ...ev, date: format(cursor, "yyyy-MM-dd") });
+        cursor = addDays(cursor, 1);
+        guard++;
+      }
+    } else {
+      // weekly / biweekly / custom (unit: week)
+      const weekdays = config?.days?.length ? config.days : [baseDate.getDay()];
+      const windowStart = isBefore(rangeStart, baseDate) ? baseDate : rangeStart;
+      if (!isAfter(windowStart, rangeEnd)) {
+        const days = eachDayOfInterval({ start: windowStart, end: rangeEnd });
+        for (const d of days) {
+          if (!weekdays.includes(d.getDay())) continue;
+          const weeksDiff = differenceInCalendarWeeks(d, baseDate, { weekStartsOn: 0 });
+          if (weeksDiff < 0 || weeksDiff % interval !== 0) continue;
+          occurrences.push({ ...ev, date: format(d, "yyyy-MM-dd") });
+        }
+      }
+    }
+  }
+
+  return occurrences;
 }
 
 function dayLabel(dateStr: string): string {
@@ -223,6 +289,29 @@ export default function CalendarioClient({ tasks, events, categories, members, c
   const today = startOfDay(new Date());
   const todayStr = format(today, "yyyy-MM-dd");
 
+  // Calendar grid days based on viewMode
+  const monthStart = startOfMonth(viewMonth);
+  const monthEnd = endOfMonth(viewMonth);
+  const weekStart = startOfWeek(viewMonth, { weekStartsOn: 0 });
+  const weekEnd = endOfWeek(viewMonth, { weekStartsOn: 0 });
+
+  const calStart = viewMode === "month"
+    ? startOfWeek(monthStart, { weekStartsOn: 0 })
+    : viewMode === "week"
+    ? weekStart
+    : viewMonth;
+  const calEnd = viewMode === "month"
+    ? endOfWeek(monthEnd, { weekStartsOn: 0 })
+    : viewMode === "week"
+    ? weekEnd
+    : viewMonth;
+  const calDays = viewMode === "day"
+    ? [viewMonth]
+    : eachDayOfInterval({ start: calStart, end: calEnd });
+
+  // Recurring events get expanded into one virtual occurrence per matching day in the visible range
+  const expandedEvents = expandEventOccurrences(events, calStart, calEnd);
+
   // Apply filters
   const filteredTasks = todoTasks.filter((t) => {
     const statusOk = statusFilter === "all" || t.status === statusFilter;
@@ -262,7 +351,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
     return acc;
   }, {});
 
-  for (const ev of events) {
+  for (const ev of expandedEvents) {
     const key = ev.date.slice(0, 10);
     if (!dateGroups[key]) dateGroups[key] = { tasks: [], events: [] };
     if (!dateGroups[key].events.find((e) => e.id === ev.id)) {
@@ -275,26 +364,6 @@ export default function CalendarioClient({ tasks, events, categories, members, c
   const undated = filteredTasks.filter(
     (t) => !t.due_date && ((t.assignees?.length ?? 0) > 0 || t.status !== "todo")
   );
-
-  // Calendar grid days based on viewMode
-  const monthStart = startOfMonth(viewMonth);
-  const monthEnd = endOfMonth(viewMonth);
-  const weekStart = startOfWeek(viewMonth, { weekStartsOn: 0 });
-  const weekEnd = endOfWeek(viewMonth, { weekStartsOn: 0 });
-
-  const calStart = viewMode === "month"
-    ? startOfWeek(monthStart, { weekStartsOn: 0 })
-    : viewMode === "week"
-    ? weekStart
-    : viewMonth;
-  const calEnd = viewMode === "month"
-    ? endOfWeek(monthEnd, { weekStartsOn: 0 })
-    : viewMode === "week"
-    ? weekEnd
-    : viewMonth;
-  const calDays = viewMode === "day"
-    ? [viewMonth]
-    : eachDayOfInterval({ start: calStart, end: calEnd });
 
   function navigatePrev() {
     if (viewMode === "month") setViewMonth((m) => subMonths(m, 1));
@@ -319,7 +388,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
     return acc;
   }, {});
 
-  const eventDateSet = events.reduce<Record<string, true>>((acc, e) => {
+  const eventDateSet = expandedEvents.reduce<Record<string, true>>((acc, e) => {
     acc[e.date.slice(0, 10)] = true;
     return acc;
   }, {});
@@ -687,7 +756,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
         <DayPanel
           dateStr={selectedDay}
           tasks={todoTasks.filter((t) => t.due_date?.slice(0, 10) === selectedDay)}
-          events={events.filter((e) => e.date.slice(0, 10) === selectedDay)}
+          events={expandedEvents.filter((e) => e.date.slice(0, 10) === selectedDay)}
           onAdd={() => {
             setSelectedDay(null);
             openCreate(selectedDay);
