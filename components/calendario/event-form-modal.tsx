@@ -78,8 +78,15 @@ export default function EventFormModal({ event, events = [], members, defaultDat
   const [title, setTitle]   = useState(event?.title ?? "");
   const [date, setDate]     = useState(event?.date ?? defaultDate ?? "");
   const [visibility, setVisibility] = useState<"public" | "private">(event?.visibility ?? "public");
-  const [hasTime, setHasTime] = useState(Boolean(event?.start_time && event?.end_time));
   const [period, setPeriod] = useState<Period>(timeToPeriod(event?.start_time));
+
+  // Horário exato (opcional): ligado quando start_time não bate com o horário padrão do período
+  const periodStart = event?.start_time ? PERIOD_TIMES[timeToPeriod(event.start_time)].start : "";
+  const hasCustomTime = Boolean(event?.start_time && event.start_time.slice(0, 5) !== periodStart.slice(0, 5));
+  const [hasExactTime, setHasExactTime] = useState(hasCustomTime);
+  const [exactStart, setExactStart] = useState(hasCustomTime ? (event!.start_time!.slice(0, 5)) : "");
+  const [exactEnd,   setExactEnd]   = useState(hasCustomTime ? (event!.end_time!.slice(0, 5))   : "");
+
   const [participantIds, setParticipantIds] = useState<string[]>(
     event?.participants?.map((p) => p.id) ?? []
   );
@@ -151,9 +158,16 @@ export default function EventFormModal({ event, events = [], members, defaultDat
       return;
     }
 
-    const { start, end } = hasTime ? PERIOD_TIMES[period] : { start: null, end: null };
+    if (hasExactTime) {
+      if (!exactStart || !exactEnd) { setError("Informe o horário de início e término."); return; }
+      if (exactStart >= exactEnd)   { setError("O horário de término deve ser depois do início."); return; }
+    }
 
-    if (!skipConflictCheck && start && end) {
+    const periodTimes = PERIOD_TIMES[period];
+    const start = hasExactTime ? exactStart : periodTimes.start;
+    const end   = hasExactTime ? exactEnd   : periodTimes.end;
+
+    if (!skipConflictCheck) {
       const conflicts = findConflicts(start, end);
       if (conflicts.length > 0) {
         setConflictMessage(
@@ -302,44 +316,77 @@ export default function EventFormModal({ event, events = [], members, defaultDat
             </div>
           </div>
 
-          {/* Período */}
+          {/* Período (obrigatório) */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Período *</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(["manha", "tarde", "noite"] as Period[]).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPeriod(p)}
+                  className={cn(
+                    "flex flex-col items-center gap-1 py-3 rounded-xl border-2 text-xs font-medium transition-colors",
+                    period === p
+                      ? "bg-violet-600 text-white border-violet-600"
+                      : "bg-white text-slate-600 border-slate-200"
+                  )}
+                >
+                  <span className="text-lg">{PERIOD_ICONS[p]}</span>
+                  {PERIOD_LABELS[p]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Horário exato (opcional) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">Horário</label>
               <button
                 type="button"
-                onClick={() => setHasTime((prev) => !prev)}
+                onClick={() => {
+                  setHasExactTime((prev) => {
+                    if (!prev && !exactStart) {
+                      setExactStart(PERIOD_TIMES[period].start);
+                      setExactEnd(PERIOD_TIMES[period].end);
+                    }
+                    return !prev;
+                  });
+                }}
                 className={cn(
                   "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
-                  hasTime ? "bg-violet-600" : "bg-slate-200"
+                  hasExactTime ? "bg-violet-600" : "bg-slate-200"
                 )}
               >
                 <span
                   className={cn(
                     "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
-                    hasTime ? "translate-x-6" : "translate-x-1"
+                    hasExactTime ? "translate-x-6" : "translate-x-1"
                   )}
                 />
               </button>
             </div>
-            {hasTime && (
-              <div className="grid grid-cols-3 gap-2">
-                {(["manha", "tarde", "noite"] as Period[]).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPeriod(p)}
-                    className={cn(
-                      "flex flex-col items-center gap-1 py-3 rounded-xl border-2 text-xs font-medium transition-colors",
-                      period === p
-                        ? "bg-violet-600 text-white border-violet-600"
-                        : "bg-white text-slate-600 border-slate-200"
-                    )}
-                  >
-                    <span className="text-lg">{PERIOD_ICONS[p]}</span>
-                    {PERIOD_LABELS[p]}
-                  </button>
-                ))}
+            {hasExactTime && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-500">Início</p>
+                  <input
+                    type="time"
+                    value={exactStart}
+                    onChange={(e) => setExactStart(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-500">Fim</p>
+                  <input
+                    type="time"
+                    value={exactEnd}
+                    onChange={(e) => setExactEnd(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
               </div>
             )}
           </div>
