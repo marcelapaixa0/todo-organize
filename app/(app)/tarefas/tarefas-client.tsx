@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { Task, Profile, Category } from "@/lib/types";
+import { usePullToRefresh } from "@/lib/use-pull-to-refresh";
 import TaskCard from "@/components/tarefas/task-card";
 import TaskFormModal from "@/components/tarefas/task-form-modal";
 import EventFormModal from "@/components/calendario/event-form-modal";
@@ -24,6 +25,7 @@ type Props = {
 };
 
 export default function TarefasClient({ tasks, categories, members, currentProfile }: Props) {
+  const { containerRef, pullY, refreshing, onTouchStart, onTouchMove, onTouchEnd } = usePullToRefresh();
   const [activeTab, setActiveTab] = useState<"backlog" | "todo">("backlog");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
@@ -231,7 +233,33 @@ export default function TarefasClient({ tasks, categories, members, currentProfi
       </div>
 
       {/* Task list */}
-      <div className={`flex-1 overflow-y-auto px-4 py-3 space-y-3 ${selectMode ? 'pb-72' : 'pb-36'}`}>
+      <div
+        ref={containerRef}
+        className={`flex-1 overflow-y-auto px-4 py-3 space-y-3 ${selectMode ? 'pb-72' : 'pb-36'}`}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        {/* Pull-to-refresh indicator */}
+        <div
+          className="flex items-center justify-center overflow-hidden"
+          style={{ height: refreshing ? 40 : pullY > 0 ? Math.min(pullY * 0.6, 40) : 0, transition: pullY === 0 ? "height 0.2s ease" : "none" }}
+        >
+          {refreshing ? (
+            <svg className="w-5 h-5 text-indigo-500 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg
+              className="w-5 h-5 text-slate-400"
+              style={{ transform: `rotate(${Math.min((pullY / 64) * 180, 180)}deg)`, transition: "transform 0.1s" }}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          )}
+        </div>
         {visibleTasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
             <svg className="w-12 h-12 mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">

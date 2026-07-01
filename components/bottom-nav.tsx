@@ -51,7 +51,7 @@ export default function BottomNav() {
               key={tab.href}
               href={tab.href}
               className={cn(
-                "flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors",
+                "flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors touch-manipulation",
                 active ? "text-indigo-600" : "text-slate-400"
               )}
             >
