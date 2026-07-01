@@ -281,9 +281,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
     if (!tasksWithReminders.length) return;
 
     const schedule = async () => {
-      let permission = Notification.permission;
-      if (permission === "default") permission = await Notification.requestPermission();
-      if (permission !== "granted") return;
+      if (Notification.permission !== "granted") return;
 
       for (const t of tasksWithReminders) {
         const due = parseISO(t.due_date!);
@@ -351,20 +349,24 @@ export default function CalendarioClient({ tasks, events, categories, members, c
 
   const selectedCount = selectedTaskIds.size + selectedEventIds.size;
 
-  // Fix 1: done tasks never appear in "overdue"
+  // Fix 1: done tasks never appear in "overdue"; scoped to current view period
   const overdue = filteredTasks.filter(
     (t) =>
       t.due_date &&
       t.status !== "done" &&
       isBefore(parseISO(t.due_date), today) &&
-      !isSameDay(parseISO(t.due_date), today)
+      !isSameDay(parseISO(t.due_date), today) &&
+      !isBefore(parseISO(t.due_date), calStart) &&
+      !isAfter(parseISO(t.due_date), calEnd)
   );
 
-  // Fix 1: past done tasks appear in their date group
+  // Fix 1: past done tasks appear in their date group; scoped to current view period
   const withDate = filteredTasks.filter(
     (t) =>
       t.due_date &&
-      (!isBefore(parseISO(t.due_date), today) || t.status === "done")
+      (!isBefore(parseISO(t.due_date), today) || t.status === "done") &&
+      !isBefore(parseISO(t.due_date), calStart) &&
+      !isAfter(parseISO(t.due_date), calEnd)
   );
 
   // Fix 2: combine tasks and events into date groups
