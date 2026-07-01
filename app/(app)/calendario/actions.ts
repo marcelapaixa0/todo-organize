@@ -102,3 +102,52 @@ export async function restoreEvent(eventId: string) {
   revalidatePath("/perfil");
   return { success: true };
 }
+
+export async function bulkDeleteEvents(eventIds: string[]) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("calendar_events")
+    .update({ deleted_at: new Date().toISOString() })
+    .in("id", eventIds);
+
+  if (error) return { error: error.message };
+  revalidatePath("/calendario");
+  revalidatePath("/perfil");
+  return { success: true };
+}
+
+export async function bulkUpdateEventDate(eventIds: string[], date: string) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("calendar_events")
+    .update({ date })
+    .in("id", eventIds);
+
+  if (error) return { error: error.message };
+  revalidatePath("/calendario");
+  return { success: true };
+}
+
+export async function bulkUpdateEventParticipants(eventIds: string[], participantIds: string[]) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  await supabase.from("event_participants").delete().in("event_id", eventIds);
+
+  if (participantIds.length > 0) {
+    const rows = eventIds.flatMap((eid) =>
+      participantIds.map((pid) => ({ event_id: eid, profile_id: pid }))
+    );
+    await supabase.from("event_participants").insert(rows);
+  }
+
+  revalidatePath("/calendario");
+  return { success: true };
+}

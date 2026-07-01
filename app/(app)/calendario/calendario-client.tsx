@@ -36,7 +36,10 @@ import {
   advanceTaskStatus, deleteTask,
   bulkDeleteTasks, bulkAdvanceStatus, bulkUpdateDueDate, bulkUpdateAssignees,
 } from "../tarefas/actions";
-import { deleteEvent } from "./actions";
+import {
+  deleteEvent,
+  bulkDeleteEvents, bulkUpdateEventDate, bulkUpdateEventParticipants,
+} from "./actions";
 import MemberAvatar from "@/components/member-avatar";
 
 type Props = {
@@ -168,7 +171,8 @@ export default function CalendarioClient({ tasks, events, categories, members, c
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
   const [bulkPanel, setBulkPanel] = useState<"date" | "assignee" | "confirmDelete" | null>(null);
   const [bulkDate, setBulkDate] = useState("");
   const [bulkAssigneeIds, setBulkAssigneeIds] = useState<string[]>([]);
@@ -193,12 +197,21 @@ export default function CalendarioClient({ tasks, events, categories, members, c
 
   function exitSelectMode() {
     setSelectMode(false);
-    setSelectedIds(new Set());
+    setSelectedTaskIds(new Set());
+    setSelectedEventIds(new Set());
     setBulkPanel(null);
   }
 
-  function toggleSelect(id: string) {
-    setSelectedIds((prev) => {
+  function toggleSelectTask(id: string) {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  }
+
+  function toggleSelectEvent(id: string) {
+    setSelectedEventIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
@@ -206,34 +219,41 @@ export default function CalendarioClient({ tasks, events, categories, members, c
   }
 
   async function handleBulkAdvance() {
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(selectedTaskIds);
+    if (ids.length === 0) return;
     await bulkAdvanceStatus(ids);
-    showToast(`${ids.length} tarefas avançadas`);
+    showToast(`${ids.length} tarefa${ids.length > 1 ? "s" : ""} avançada${ids.length > 1 ? "s" : ""}`);
     exitSelectMode();
   }
 
   async function handleBulkDate() {
-    const ids = Array.from(selectedIds);
-    await bulkUpdateDueDate(ids, bulkDate || null);
-    showToast(`Data atualizada em ${ids.length} tarefas`);
+    const taskIds = Array.from(selectedTaskIds);
+    const eventIds = Array.from(selectedEventIds);
+    if (taskIds.length > 0) await bulkUpdateDueDate(taskIds, bulkDate || null);
+    if (eventIds.length > 0 && bulkDate) await bulkUpdateEventDate(eventIds, bulkDate);
+    showToast(`Data atualizada em ${taskIds.length + eventIds.length} item${taskIds.length + eventIds.length > 1 ? "s" : ""}`);
     setBulkPanel(null);
     setBulkDate("");
     exitSelectMode();
   }
 
   async function handleBulkAssignee() {
-    const ids = Array.from(selectedIds);
-    await bulkUpdateAssignees(ids, bulkAssigneeIds);
-    showToast(`Responsável atualizado em ${ids.length} tarefas`);
+    const taskIds = Array.from(selectedTaskIds);
+    const eventIds = Array.from(selectedEventIds);
+    if (taskIds.length > 0) await bulkUpdateAssignees(taskIds, bulkAssigneeIds);
+    if (eventIds.length > 0) await bulkUpdateEventParticipants(eventIds, bulkAssigneeIds);
+    showToast(`Responsável atualizado em ${taskIds.length + eventIds.length} item${taskIds.length + eventIds.length > 1 ? "s" : ""}`);
     setBulkPanel(null);
     setBulkAssigneeIds([]);
     exitSelectMode();
   }
 
   async function handleBulkDelete() {
-    const ids = Array.from(selectedIds);
-    await bulkDeleteTasks(ids);
-    showToast(`${ids.length} tarefas excluídas`);
+    const taskIds = Array.from(selectedTaskIds);
+    const eventIds = Array.from(selectedEventIds);
+    if (taskIds.length > 0) await bulkDeleteTasks(taskIds);
+    if (eventIds.length > 0) await bulkDeleteEvents(eventIds);
+    showToast(`${taskIds.length + eventIds.length} item${taskIds.length + eventIds.length > 1 ? "s" : ""} excluído${taskIds.length + eventIds.length > 1 ? "s" : ""}`);
     exitSelectMode();
   }
 
@@ -323,8 +343,11 @@ export default function CalendarioClient({ tasks, events, categories, members, c
   });
 
   function selectAll() {
-    setSelectedIds(new Set(filteredTasks.map((t) => t.id)));
+    setSelectedTaskIds(new Set(filteredTasks.map((t) => t.id)));
+    setSelectedEventIds(new Set(expandedEvents.map((e) => e.id)));
   }
+
+  const selectedCount = selectedTaskIds.size + selectedEventIds.size;
 
   // Fix 1: done tasks never appear in "overdue"
   const overdue = filteredTasks.filter(
@@ -421,7 +444,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
               <div className="flex items-center gap-2">
                 <button onClick={exitSelectMode} className="text-sm font-medium text-slate-500">Cancelar</button>
                 <span className="text-sm font-semibold text-slate-800">
-                  {selectedIds.size > 0 ? `${selectedIds.size} selecionada${selectedIds.size > 1 ? "s" : ""}` : "Selecione tarefas"}
+                  {selectedCount > 0 ? `${selectedCount} selecionado${selectedCount > 1 ? "s" : ""}` : "Selecione itens"}
                 </span>
               </div>
               <button onClick={selectAll} className="text-sm font-medium text-indigo-600">Selecionar tudo</button>
@@ -430,7 +453,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
             <>
               <h1 className="text-xl font-bold text-slate-900">To Do</h1>
               <div className="flex items-center gap-2">
-                {filteredTasks.length > 0 && (
+                {(filteredTasks.length > 0 || expandedEvents.length > 0) && (
                   <button
                     onClick={() => setSelectMode(true)}
                     className="text-xs font-medium text-slate-500 px-2.5 py-1.5 rounded-lg border border-slate-200"
@@ -675,8 +698,8 @@ export default function CalendarioClient({ tasks, events, categories, members, c
                   onEdit={() => openEdit(task)}
                   onAdvance={() => tryAdvance(task)}
                   selectMode={selectMode}
-                  selected={selectedIds.has(task.id)}
-                  onToggleSelect={() => toggleSelect(task.id)}
+                  selected={selectedTaskIds.has(task.id)}
+                  onToggleSelect={() => toggleSelectTask(task.id)}
                 />
               ))}
             </div>
@@ -708,7 +731,15 @@ export default function CalendarioClient({ tasks, events, categories, members, c
               </div>
               <div className="space-y-2">
                 {dayEvents.map((ev) => (
-                  <EventRow key={ev.id} event={ev} onEdit={() => openEditEvent(ev)} onDelete={() => handleDeleteEvent(ev)} />
+                  <EventRow
+                    key={ev.id}
+                    event={ev}
+                    onEdit={() => openEditEvent(ev)}
+                    onDelete={() => handleDeleteEvent(ev)}
+                    selectMode={selectMode}
+                    selected={selectedEventIds.has(ev.id)}
+                    onToggleSelect={() => toggleSelectEvent(ev.id)}
+                  />
                 ))}
                 {dayTasks.map((task) => (
                   <TaskRow
@@ -717,8 +748,8 @@ export default function CalendarioClient({ tasks, events, categories, members, c
                     onEdit={() => openEdit(task)}
                     onAdvance={() => tryAdvance(task)}
                     selectMode={selectMode}
-                    selected={selectedIds.has(task.id)}
-                    onToggleSelect={() => toggleSelect(task.id)}
+                    selected={selectedTaskIds.has(task.id)}
+                    onToggleSelect={() => toggleSelectTask(task.id)}
                   />
                 ))}
               </div>
@@ -742,8 +773,8 @@ export default function CalendarioClient({ tasks, events, categories, members, c
                   onEdit={() => openEdit(task)}
                   onAdvance={() => tryAdvance(task)}
                   selectMode={selectMode}
-                  selected={selectedIds.has(task.id)}
-                  onToggleSelect={() => toggleSelect(task.id)}
+                  selected={selectedTaskIds.has(task.id)}
+                  onToggleSelect={() => toggleSelectTask(task.id)}
                 />
               ))}
             </div>
@@ -779,7 +810,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
             {bulkPanel === "confirmDelete" && (
               <div className="p-4 space-y-3 border-b border-slate-100">
                 <p className="text-sm font-medium text-red-700 text-center">
-                  Excluir {selectedIds.size} tarefa{selectedIds.size > 1 ? "s" : ""}? Esta ação não pode ser desfeita.
+                  Excluir {selectedCount} item{selectedCount > 1 ? "s" : ""}? Esta ação não pode ser desfeita.
                 </p>
                 <div className="flex gap-2">
                   <button onClick={() => setBulkPanel(null)} className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-slate-100 text-slate-700">Cancelar</button>
@@ -789,7 +820,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
             )}
             {bulkPanel === "date" && (
               <div className="p-4 space-y-3 border-b border-slate-100">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nova data para {selectedIds.size} tarefa{selectedIds.size > 1 ? "s" : ""}</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nova data para {selectedCount} item{selectedCount > 1 ? "s" : ""}</p>
                 <input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 <div className="flex gap-2">
                   <button onClick={() => setBulkPanel(null)} className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-slate-100 text-slate-700">Cancelar</button>
@@ -799,7 +830,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
             )}
             {bulkPanel === "assignee" && (
               <div className="p-4 space-y-3 border-b border-slate-100">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Responsável para {selectedIds.size} tarefa{selectedIds.size > 1 ? "s" : ""}</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Responsável para {selectedCount} item{selectedCount > 1 ? "s" : ""}</p>
                 <div className="flex flex-wrap gap-2">
                   {members.map((m) => {
                     const active = bulkAssigneeIds.includes(m.id);
@@ -824,19 +855,19 @@ export default function CalendarioClient({ tasks, events, categories, members, c
               </div>
             )}
             <div className="flex items-center divide-x divide-slate-100">
-              <button disabled={selectedIds.size === 0} onClick={() => { setBulkPanel(null); startTransition(() => { void handleBulkAdvance(); }); }} className="flex-1 flex flex-col items-center gap-0.5 py-3 text-slate-600 disabled:opacity-40 active:bg-slate-50">
+              <button disabled={selectedTaskIds.size === 0} onClick={() => { setBulkPanel(null); startTransition(() => { void handleBulkAdvance(); }); }} className="flex-1 flex flex-col items-center gap-0.5 py-3 text-slate-600 disabled:opacity-40 active:bg-slate-50">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
                 <span className="text-[10px] font-medium">Avançar</span>
               </button>
-              <button disabled={selectedIds.size === 0} onClick={() => setBulkPanel(bulkPanel === "date" ? null : "date")} className={`flex-1 flex flex-col items-center gap-0.5 py-3 disabled:opacity-40 active:bg-slate-50 ${bulkPanel === "date" ? "text-indigo-600" : "text-slate-600"}`}>
+              <button disabled={selectedCount === 0} onClick={() => setBulkPanel(bulkPanel === "date" ? null : "date")} className={`flex-1 flex flex-col items-center gap-0.5 py-3 disabled:opacity-40 active:bg-slate-50 ${bulkPanel === "date" ? "text-indigo-600" : "text-slate-600"}`}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 <span className="text-[10px] font-medium">Data</span>
               </button>
-              <button disabled={selectedIds.size === 0} onClick={() => setBulkPanel(bulkPanel === "assignee" ? null : "assignee")} className={`flex-1 flex flex-col items-center gap-0.5 py-3 disabled:opacity-40 active:bg-slate-50 ${bulkPanel === "assignee" ? "text-indigo-600" : "text-slate-600"}`}>
+              <button disabled={selectedCount === 0} onClick={() => setBulkPanel(bulkPanel === "assignee" ? null : "assignee")} className={`flex-1 flex flex-col items-center gap-0.5 py-3 disabled:opacity-40 active:bg-slate-50 ${bulkPanel === "assignee" ? "text-indigo-600" : "text-slate-600"}`}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                 <span className="text-[10px] font-medium">Responsável</span>
               </button>
-              <button disabled={selectedIds.size === 0} onClick={() => setBulkPanel(bulkPanel === "confirmDelete" ? null : "confirmDelete")} className={`flex-1 flex flex-col items-center gap-0.5 py-3 disabled:opacity-40 active:bg-red-50 ${bulkPanel === "confirmDelete" ? "text-red-600" : "text-slate-600"}`}>
+              <button disabled={selectedCount === 0} onClick={() => setBulkPanel(bulkPanel === "confirmDelete" ? null : "confirmDelete")} className={`flex-1 flex flex-col items-center gap-0.5 py-3 disabled:opacity-40 active:bg-red-50 ${bulkPanel === "confirmDelete" ? "text-red-600" : "text-slate-600"}`}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 <span className="text-[10px] font-medium">Excluir</span>
               </button>
@@ -1035,19 +1066,38 @@ type EventRowProps = {
   event: CalendarEvent;
   onEdit: () => void;
   onDelete: () => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 };
 
-function EventRow({ event, onEdit, onDelete }: EventRowProps) {
+function EventRow({ event, onEdit, onDelete, selectMode = false, selected = false, onToggleSelect }: EventRowProps) {
   return (
     <div
-      onClick={onEdit}
-      className="w-full text-left bg-violet-50 rounded-xl border border-violet-100 shadow-sm px-3 py-2.5 min-h-[72px] flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-transform"
+      onClick={selectMode ? onToggleSelect : onEdit}
+      className={cn(
+        "w-full text-left rounded-xl border shadow-sm px-3 py-2.5 min-h-[72px] flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-transform",
+        selected ? "bg-indigo-50 border-indigo-400" : "bg-violet-50 border-violet-100"
+      )}
     >
-      {/* Icon */}
-      <div className="w-7 h-7 rounded-lg bg-violet-200 border border-violet-200 flex items-center justify-center flex-shrink-0">
-        <svg className="w-3.5 h-3.5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
+      {/* Icon / checkbox */}
+      <div className={cn(
+        "w-7 h-7 rounded-lg border flex items-center justify-center flex-shrink-0",
+        selectMode
+          ? selected ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-300"
+          : "bg-violet-200 border-violet-200"
+      )}>
+        {selectMode ? (
+          selected && (
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+          )
+        ) : (
+          <svg className="w-3.5 h-3.5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        )}
       </div>
 
       {/* Title + período */}
@@ -1079,16 +1129,18 @@ function EventRow({ event, onEdit, onDelete }: EventRowProps) {
         </div>
       )}
 
-      {/* Lixeira */}
-      <button
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        className="w-6 h-6 rounded-full bg-white/80 border border-violet-200 flex items-center justify-center active:scale-95 transition-all hover:bg-red-50 hover:border-red-200 group flex-shrink-0"
-        title="Excluir evento"
-      >
-        <svg className="w-3 h-3 text-violet-400 group-hover:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-      </button>
+      {/* Lixeira (oculta no modo seleção) */}
+      {!selectMode && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="w-6 h-6 rounded-full bg-white/80 border border-violet-200 flex items-center justify-center active:scale-95 transition-all hover:bg-red-50 hover:border-red-200 group flex-shrink-0"
+          title="Excluir evento"
+        >
+          <svg className="w-3 h-3 text-violet-400 group-hover:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
