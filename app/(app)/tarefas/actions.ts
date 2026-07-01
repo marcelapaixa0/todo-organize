@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { parseISO, addDays, addWeeks, addMonths, addYears, format } from "date-fns";
 import type { TaskStatus, TaskPriority, RecurrenceType, RecurrenceConfig } from "@/lib/types";
+import { sendPushToProfile } from "@/lib/push";
 
 type ChecklistItemPayload = {
   text: string;
@@ -71,6 +72,15 @@ export async function createTask(payload: TaskPayload) {
     await supabase.from("task_assignees").insert(
       assignee_ids.map((pid) => ({ task_id: task.id, profile_id: pid }))
     );
+    for (const pid of assignee_ids) {
+      if (pid !== profile.id) {
+        void sendPushToProfile(pid, {
+          title: "Nova tarefa atribuída",
+          body: task.title,
+          url: "/tarefas",
+        });
+      }
+    }
   }
 
   const items = (checklist_items ?? []).filter((i) => i.text.trim());
@@ -151,10 +161,21 @@ export async function updateTask(taskId: string, payload: TaskPayload) {
       }
     }
 
-    const oldAssignees = (currentAssigneesRes.data ?? []).map((a) => a.profile_id).sort().join(",");
+    const oldSet = new Set((currentAssigneesRes.data ?? []).map((a) => a.profile_id));
+    const oldAssignees = Array.from(oldSet).sort().join(",");
     const newAssignees = [...assignee_ids].sort().join(",");
     if (oldAssignees !== newAssignees) {
       changes.push({ field: "assignees", old: oldAssignees || null, new: newAssignees || null });
+    }
+
+    for (const pid of assignee_ids) {
+      if (!oldSet.has(pid) && pid !== profile.id) {
+        void sendPushToProfile(pid, {
+          title: "Você foi adicionado a uma tarefa",
+          body: taskData.title,
+          url: "/tarefas",
+        });
+      }
     }
 
     if (changes.length > 0) {
@@ -272,6 +293,18 @@ export async function bulkUpdateAssignees(taskIds: string[], assigneeIds: string
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+
+  const { data: oldAssigneesData } = await supabase
+    .from("task_assignees")
+    .select("profile_id")
+    .in("task_id", taskIds);
+  const oldProfileIds = new Set((oldAssigneesData ?? []).map((a) => a.profile_id));
+
   await supabase.from("task_assignees").delete().in("task_id", taskIds);
 
   if (assigneeIds.length > 0) {
@@ -279,6 +312,16 @@ export async function bulkUpdateAssignees(taskIds: string[], assigneeIds: string
       assigneeIds.map((pid) => ({ task_id: tid, profile_id: pid }))
     );
     await supabase.from("task_assignees").insert(rows);
+
+    for (const pid of assigneeIds) {
+      if (!oldProfileIds.has(pid) && pid !== profile?.id) {
+        void sendPushToProfile(pid, {
+          title: "Você foi atribuído a uma tarefa",
+          body: `${taskIds.length} tarefa${taskIds.length > 1 ? "s" : ""}`,
+          url: "/tarefas",
+        });
+      }
+    }
   }
 
   revalidatePath("/tarefas");
@@ -286,10 +329,23 @@ export async function bulkUpdateAssignees(taskIds: string[], assigneeIds: string
   return { success: true };
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  in_progress: "Em andamento",
+  on_hold: "Em espera",
+  done: "Concluída",
+  todo: "A fazer",
+};
+
 export async function advanceTaskStatus(taskId: string, currentStatus: TaskStatus) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
 
   const nextStatus = STATUS_CYCLE[currentStatus] as TaskStatus;
 
@@ -299,6 +355,21 @@ export async function advanceTaskStatus(taskId: string, currentStatus: TaskStatu
     .eq("id", taskId);
 
   if (error) return { error: error.message };
+
+  const { data: assigneesData } = await supabase
+    .from("task_assignees")
+    .select("profile_id")
+    .eq("task_id", taskId);
+
+  for (const a of assigneesData ?? []) {
+    if (a.profile_id !== profile?.id) {
+      void sendPushToProfile(a.profile_id, {
+        title: "Status de tarefa atualizado",
+        body: `Status mudou para: ${STATUS_LABELS[nextStatus] ?? nextStatus}`,
+        url: "/tarefas",
+      });
+    }
+  }
 
   // When completing a recurring task, create the next occurrence
   if (nextStatus === "done") {

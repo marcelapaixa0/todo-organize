@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { RecurrenceType, RecurrenceConfig } from "@/lib/types";
+import { sendPushToProfile } from "@/lib/push";
 
 type EventPayload = {
   title: string;
@@ -44,6 +45,15 @@ export async function createEvent(payload: EventPayload) {
     await supabase.from("event_participants").insert(
       participant_ids.map((pid) => ({ event_id: event.id, profile_id: pid }))
     );
+    for (const pid of participant_ids) {
+      if (pid !== profile.id) {
+        void sendPushToProfile(pid, {
+          title: "Novo evento criado",
+          body: event.title,
+          url: "/calendario",
+        });
+      }
+    }
   }
 
   revalidatePath("/calendario");
@@ -55,6 +65,12 @@ export async function updateEvent(eventId: string, payload: EventPayload) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+
   const { participant_ids, ...eventData } = payload;
 
   const { error } = await supabase.from("calendar_events").update(eventData).eq("id", eventId);
@@ -65,6 +81,15 @@ export async function updateEvent(eventId: string, payload: EventPayload) {
     await supabase.from("event_participants").insert(
       participant_ids.map((pid) => ({ event_id: eventId, profile_id: pid }))
     );
+    for (const pid of participant_ids) {
+      if (pid !== profile?.id) {
+        void sendPushToProfile(pid, {
+          title: "Evento atualizado",
+          body: eventData.title,
+          url: "/calendario",
+        });
+      }
+    }
   }
 
   revalidatePath("/calendario");

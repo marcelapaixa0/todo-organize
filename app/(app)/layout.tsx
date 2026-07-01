@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import BottomNav from "@/components/bottom-nav";
+import PushProvider from "@/components/push-provider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -10,6 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="h-dvh flex flex-col max-w-2xl mx-auto overflow-hidden">
+      <PushProvider />
       <main className="flex-1 overflow-y-auto">
         {children}
       </main>
