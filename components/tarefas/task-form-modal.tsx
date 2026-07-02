@@ -207,7 +207,7 @@ export default function TaskFormModal({
     };
 
     const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Tempo limite excedido. Tente novamente.")), 20_000)
+      setTimeout(() => reject(new Error("Tempo limite excedido. Tente novamente.")), 10_000)
     );
 
     try {
@@ -278,9 +278,6 @@ export default function TaskFormModal({
           {/* ── DETALHES TAB ── */}
           {(!isEditing || activeTab === "detalhes") && (
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              {error && (
-                <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>
-              )}
 
               {/* Title + description */}
               <div className="space-y-2">
@@ -488,6 +485,10 @@ export default function TaskFormModal({
                   Adicionar item
                 </button>
               </div>
+
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>
+              )}
 
               {isEditing && onDelete ? (
                 confirmDelete ? (

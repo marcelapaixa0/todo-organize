@@ -200,7 +200,7 @@ export default function EventFormModal({ event, events = [], members, defaultDat
     };
 
     const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Tempo limite excedido. Tente novamente.")), 20_000)
+      setTimeout(() => reject(new Error("Tempo limite excedido. Tente novamente.")), 10_000)
     );
 
     try {
@@ -581,7 +581,10 @@ export default function EventFormModal({ event, events = [], members, defaultDat
         </div>
 
         {/* Submit — fixo fora da área rolável, sempre acessível */}
-        <div className="flex-shrink-0 p-5 pt-3">
+        <div className="flex-shrink-0 px-5 pb-5 pt-3 space-y-2">
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>
+          )}
           <button
             type="submit"
             disabled={loading}
