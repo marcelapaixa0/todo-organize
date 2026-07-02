@@ -206,14 +206,20 @@ export default function TaskFormModal({
         .map((i, idx) => ({ text: i.text, assignee_id: i.assigneeId || null, position: idx })),
     };
 
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Tempo limite excedido. Tente novamente.")), 20_000)
+    );
+
     try {
-      const result = task
-        ? await updateTask(task.id, payload)
-        : await createTask(payload);
-      if (result.error) { setError(result.error); setLoading(false); return; }
+      const result = await Promise.race([
+        task ? updateTask(task.id, payload) : createTask(payload),
+        timeout,
+      ]);
+      if (result.error) { setError(result.error); return; }
       onClose();
-    } catch {
-      setError("Erro ao salvar. Verifique sua conexão e tente novamente.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao salvar. Tente novamente.");
+    } finally {
       setLoading(false);
     }
   }
