@@ -199,15 +199,20 @@ export default function EventFormModal({ event, events = [], members, defaultDat
       participant_ids: participantIds,
     };
 
-    try {
-      const result = event
-        ? await updateEvent(event.id, payload)
-        : await createEvent(payload);
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Tempo limite excedido. Tente novamente.")), 20_000)
+    );
 
-      if (result.error) { setError(result.error); setLoading(false); return; }
+    try {
+      const result = await Promise.race([
+        event ? updateEvent(event.id, payload) : createEvent(payload),
+        timeout,
+      ]);
+      if (result.error) { setError(result.error); return; }
       onClose();
-    } catch {
-      setError("Erro ao salvar. Tente novamente.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao salvar. Tente novamente.");
+    } finally {
       setLoading(false);
     }
   }
