@@ -336,8 +336,13 @@ export default function CalendarioClient({ tasks, events, categories, members, c
     ? [viewMonth]
     : eachDayOfInterval({ start: calStart, end: calEnd });
 
-  // Recurring events get expanded into one virtual occurrence per matching day in the visible range
-  const expandedEvents = expandEventOccurrences(events, calStart, calEnd);
+  // Recurring events get expanded into one virtual occurrence per matching day in the visible range.
+  // Apply assigneeFilter and optimistic deletions before expanding so the list reflects current state.
+  const filteredEventSource = events.filter((e) =>
+    !deletedEventIds.has(e.id) &&
+    (assigneeFilter === "all" || e.participants?.some((p) => p.id === assigneeFilter))
+  );
+  const expandedEvents = expandEventOccurrences(filteredEventSource, calStart, calEnd);
 
   // Apply filters
   const filteredTasks = todoTasks.filter((t) => {
