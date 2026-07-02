@@ -206,12 +206,16 @@ export default function TaskFormModal({
         .map((i, idx) => ({ text: i.text, assignee_id: i.assigneeId || null, position: idx })),
     };
 
-    const result = task
-      ? await updateTask(task.id, payload)
-      : await createTask(payload);
-
-    if (result.error) { setError(result.error); setLoading(false); return; }
-    onClose();
+    try {
+      const result = task
+        ? await updateTask(task.id, payload)
+        : await createTask(payload);
+      if (result.error) { setError(result.error); setLoading(false); return; }
+      onClose();
+    } catch {
+      setError("Erro ao salvar. Verifique sua conexão e tente novamente.");
+      setLoading(false);
+    }
   }
 
   // ─── Render helpers ──────────────────────────────
@@ -361,12 +365,26 @@ export default function TaskFormModal({
                 <label className="text-sm font-medium text-slate-700">
                   Data limite {requiresAssigneeAndDate(status) && "*"}
                 </label>
-                <input
-                  type="date"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={dueDate}
-                  onChange={(e) => { setDueDate(e.target.value); if (!e.target.value) setRecurrence("none"); }}
-                />
+                <div className="relative flex items-center gap-2">
+                  <input
+                    type="date"
+                    className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={dueDate}
+                    onChange={(e) => { setDueDate(e.target.value); if (!e.target.value) setRecurrence("none"); }}
+                  />
+                  {dueDate && (
+                    <button
+                      type="button"
+                      onClick={() => { setDueDate(""); setRecurrence("none"); setReminderMinutes(""); }}
+                      className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+                      title="Remover data"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
 
                 {dueDate && (
                   <div className="grid grid-cols-2 gap-2">
