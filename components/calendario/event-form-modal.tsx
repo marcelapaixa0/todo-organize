@@ -199,12 +199,17 @@ export default function EventFormModal({ event, events = [], members, defaultDat
       participant_ids: participantIds,
     };
 
-    const result = event
-      ? await updateEvent(event.id, payload)
-      : await createEvent(payload);
+    try {
+      const result = event
+        ? await updateEvent(event.id, payload)
+        : await createEvent(payload);
 
-    if (result.error) { setError(result.error); setLoading(false); return; }
-    onClose();
+      if (result.error) { setError(result.error); setLoading(false); return; }
+      onClose();
+    } catch {
+      setError("Erro ao salvar. Tente novamente.");
+      setLoading(false);
+    }
   }
 
   // ─── Render ────────────────────────────────────────────────

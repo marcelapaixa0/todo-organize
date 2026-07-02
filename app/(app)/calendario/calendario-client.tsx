@@ -171,6 +171,8 @@ export default function CalendarioClient({ tasks, events, categories, members, c
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [deletedEventIds, setDeletedEventIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteEvent, setConfirmDeleteEvent] = useState<CalendarEvent | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
@@ -185,11 +187,16 @@ export default function CalendarioClient({ tasks, events, categories, members, c
     setShowEventForm(true);
   }
 
-  async function handleDeleteEvent(event: CalendarEvent) {
-    if (!confirm(`Excluir "${event.title}"?`)) return;
-    await deleteEvent(event.id);
+  function handleDeleteEvent(event: CalendarEvent) {
+    setConfirmDeleteEvent(event);
     setShowEventForm(false);
     setEditingEvent(null);
+  }
+
+  async function executeDeleteEvent(event: CalendarEvent) {
+    await deleteEvent(event.id);
+    setDeletedEventIds((prev) => new Set([...prev, event.id]));
+    setConfirmDeleteEvent(null);
   }
 
   function showToast(msg: string) {
@@ -947,13 +954,38 @@ export default function CalendarioClient({ tasks, events, categories, members, c
       {showEventForm && (
         <EventFormModal
           event={editingEvent}
-          events={events}
+          events={events.filter((e) => !deletedEventIds.has(e.id))}
           members={members}
           currentProfile={currentProfile}
           defaultDate={defaultDate}
           onClose={() => { setShowEventForm(false); setEditingEvent(null); }}
           onDelete={editingEvent ? () => handleDeleteEvent(editingEvent) : undefined}
         />
+      )}
+
+      {confirmDeleteEvent && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-5 space-y-3">
+            <p className="text-sm font-semibold text-slate-800 text-center">
+              Excluir &ldquo;{confirmDeleteEvent.title}&rdquo;?
+            </p>
+            <p className="text-xs text-slate-500 text-center">Esta ação não pode ser desfeita.</p>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setConfirmDeleteEvent(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-slate-100 text-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => executeDeleteEvent(confirmDeleteEvent)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-600 text-white"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
