@@ -195,7 +195,7 @@ export default function CalendarioClient({ tasks, events, categories, members, c
 
   async function executeDeleteEvent(event: CalendarEvent) {
     await deleteEvent(event.id);
-    setDeletedEventIds((prev) => new Set([...prev, event.id]));
+    setDeletedEventIds((prev) => new Set(prev).add(event.id));
     setConfirmDeleteEvent(null);
   }
 
