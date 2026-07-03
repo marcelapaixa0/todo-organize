@@ -1,11 +1,24 @@
 import webpush from "web-push";
 import { createClient } from "@/lib/supabase/service";
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+// Configure VAPID lazily and defensively. If any env var is missing or
+// malformed, web-push throws synchronously — and because this runs at module
+// import time, that throw would crash every server action that imports this
+// file (createTask, updateTask, etc.) with an uncatchable error. Guarding it
+// keeps push optional instead of fatal.
+const vapidSubject = process.env.VAPID_SUBJECT;
+const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+
+let pushConfigured = false;
+if (vapidSubject && vapidPublicKey && vapidPrivateKey) {
+  try {
+    webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+    pushConfigured = true;
+  } catch (e) {
+    console.error("[push] VAPID configuration invalid, push disabled:", e);
+  }
+}
 
 export type PushPayload = {
   title: string;
@@ -14,6 +27,8 @@ export type PushPayload = {
 };
 
 export async function sendPushToProfile(profileId: string, payload: PushPayload) {
+  if (!pushConfigured) return;
+
   const supabase = createClient();
 
   const { data: subs } = await supabase

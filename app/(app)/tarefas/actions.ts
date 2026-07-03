@@ -46,150 +46,158 @@ function calculateNextDate(currentDate: string, recurrence: RecurrenceType): str
 }
 
 export async function createTask(payload: TaskPayload) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Não autenticado." };
+  try {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Não autenticado." };
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, family_group_id")
-    .eq("user_id", user.id)
-    .single();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, family_group_id")
+      .eq("user_id", user.id)
+      .single();
 
-  if (!profile?.family_group_id) return { error: "Sem grupo familiar." };
+    if (!profile?.family_group_id) return { error: "Sem grupo familiar." };
 
-  const { assignee_ids, checklist_items, ...taskData } = payload;
+    const { assignee_ids, checklist_items, ...taskData } = payload;
 
-  const { data: task, error } = await supabase
-    .from("tasks")
-    .insert({ ...taskData, family_group_id: profile.family_group_id, creator_id: profile.id })
-    .select()
-    .single();
+    const { data: task, error } = await supabase
+      .from("tasks")
+      .insert({ ...taskData, family_group_id: profile.family_group_id, creator_id: profile.id })
+      .select()
+      .single();
 
-  if (error || !task) return { error: error?.message ?? "Erro ao criar tarefa." };
+    if (error || !task) return { error: error?.message ?? "Erro ao criar tarefa." };
 
-  if (assignee_ids.length > 0) {
-    await supabase.from("task_assignees").insert(
-      assignee_ids.map((pid) => ({ task_id: task.id, profile_id: pid }))
-    );
-    for (const pid of assignee_ids) {
-      if (pid !== profile.id) {
-        void sendPushToProfile(pid, {
-          title: "Nova tarefa atribuída",
-          body: task.title,
-          url: "/tarefas",
-        });
+    if (assignee_ids.length > 0) {
+      await supabase.from("task_assignees").insert(
+        assignee_ids.map((pid) => ({ task_id: task.id, profile_id: pid }))
+      );
+      for (const pid of assignee_ids) {
+        if (pid !== profile.id) {
+          sendPushToProfile(pid, {
+            title: "Nova tarefa atribuída",
+            body: task.title,
+            url: "/tarefas",
+          }).catch(() => {});
+        }
       }
     }
-  }
 
-  const items = (checklist_items ?? []).filter((i) => i.text.trim());
-  if (items.length > 0) {
-    await supabase.from("task_checklist_items").insert(
-      items.map((i) => ({
-        task_id: task.id,
-        text: i.text.trim(),
-        assignee_id: i.assignee_id,
-        position: i.position,
-        checked: false,
-      }))
-    );
-  }
+    const items = (checklist_items ?? []).filter((i) => i.text.trim());
+    if (items.length > 0) {
+      await supabase.from("task_checklist_items").insert(
+        items.map((i) => ({
+          task_id: task.id,
+          text: i.text.trim(),
+          assignee_id: i.assignee_id,
+          position: i.position,
+          checked: false,
+        }))
+      );
+    }
 
-  revalidatePath("/tarefas");
-  revalidatePath("/calendario");
-  return { success: true };
+    revalidatePath("/tarefas");
+    revalidatePath("/calendario");
+    return { success: true };
+  } catch (e) {
+    console.error("[createTask] erro não tratado:", e);
+    return { error: e instanceof Error ? e.message : "Erro inesperado ao criar tarefa." };
+  }
 }
 
 export async function updateTask(taskId: string, payload: TaskPayload) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Não autenticado." };
+  try {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Não autenticado." };
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
 
-  if (!profile) return { error: "Perfil não encontrado." };
+    if (!profile) return { error: "Perfil não encontrado." };
 
-  const { assignee_ids, checklist_items, ...taskData } = payload;
+    const { assignee_ids, checklist_items, ...taskData } = payload;
 
-  // Read current state before mutating (for history)
-  const [currentTaskRes, currentAssigneesRes] = await Promise.all([
-    supabase.from("tasks").select("*").eq("id", taskId).single(),
-    supabase.from("task_assignees").select("profile_id").eq("task_id", taskId),
-  ]);
+    const [currentTaskRes, currentAssigneesRes] = await Promise.all([
+      supabase.from("tasks").select("*").eq("id", taskId).single(),
+      supabase.from("task_assignees").select("profile_id").eq("task_id", taskId),
+    ]);
 
-  const { error } = await supabase.from("tasks").update(taskData).eq("id", taskId);
-  if (error) return { error: error.message };
+    const { error } = await supabase.from("tasks").update(taskData).eq("id", taskId);
+    if (error) return { error: error.message };
 
-  await supabase.from("task_assignees").delete().eq("task_id", taskId);
-  if (assignee_ids.length > 0) {
-    await supabase.from("task_assignees").insert(
-      assignee_ids.map((pid) => ({ task_id: taskId, profile_id: pid }))
-    );
-  }
+    await supabase.from("task_assignees").delete().eq("task_id", taskId);
+    if (assignee_ids.length > 0) {
+      await supabase.from("task_assignees").insert(
+        assignee_ids.map((pid) => ({ task_id: taskId, profile_id: pid }))
+      );
+    }
 
-  await supabase.from("task_checklist_items").delete().eq("task_id", taskId);
-  const items = (checklist_items ?? []).filter((i) => i.text.trim());
-  if (items.length > 0) {
-    await supabase.from("task_checklist_items").insert(
-      items.map((i) => ({
-        task_id: taskId,
-        text: i.text.trim(),
-        assignee_id: i.assignee_id || null,
-        position: i.position,
-        checked: false,
-      }))
-    );
-  }
+    await supabase.from("task_checklist_items").delete().eq("task_id", taskId);
+    const items = (checklist_items ?? []).filter((i) => i.text.trim());
+    if (items.length > 0) {
+      await supabase.from("task_checklist_items").insert(
+        items.map((i) => ({
+          task_id: taskId,
+          text: i.text.trim(),
+          assignee_id: i.assignee_id || null,
+          position: i.position,
+          checked: false,
+        }))
+      );
+    }
 
-  // Record edit history
-  if (currentTaskRes.data) {
-    const current = currentTaskRes.data as Record<string, unknown>;
-    const changes: Array<{ field: string; old: string | null; new: string | null }> = [];
+    if (currentTaskRes.data) {
+      const current = currentTaskRes.data as Record<string, unknown>;
+      const changes: Array<{ field: string; old: string | null; new: string | null }> = [];
 
-    for (const field of TRACKABLE_FIELDS) {
-      const oldVal = current[field] != null ? String(current[field]) : null;
-      const newVal = (taskData as Record<string, unknown>)[field] != null
-        ? String((taskData as Record<string, unknown>)[field])
-        : null;
-      if (oldVal !== newVal) {
-        changes.push({ field, old: oldVal, new: newVal });
+      for (const field of TRACKABLE_FIELDS) {
+        const oldVal = current[field] != null ? String(current[field]) : null;
+        const newVal = (taskData as Record<string, unknown>)[field] != null
+          ? String((taskData as Record<string, unknown>)[field])
+          : null;
+        if (oldVal !== newVal) {
+          changes.push({ field, old: oldVal, new: newVal });
+        }
       }
-    }
 
-    const oldSet = new Set((currentAssigneesRes.data ?? []).map((a) => a.profile_id));
-    const oldAssignees = Array.from(oldSet).sort().join(",");
-    const newAssignees = [...assignee_ids].sort().join(",");
-    if (oldAssignees !== newAssignees) {
-      changes.push({ field: "assignees", old: oldAssignees || null, new: newAssignees || null });
-    }
+      const oldSet = new Set((currentAssigneesRes.data ?? []).map((a) => a.profile_id));
+      const oldAssignees = Array.from(oldSet).sort().join(",");
+      const newAssignees = [...assignee_ids].sort().join(",");
+      if (oldAssignees !== newAssignees) {
+        changes.push({ field: "assignees", old: oldAssignees || null, new: newAssignees || null });
+      }
 
-    for (const pid of assignee_ids) {
-      if (!oldSet.has(pid) && pid !== profile.id) {
-        void sendPushToProfile(pid, {
-          title: "Você foi adicionado a uma tarefa",
-          body: taskData.title,
-          url: "/tarefas",
+      for (const pid of assignee_ids) {
+        if (!oldSet.has(pid) && pid !== profile.id) {
+          sendPushToProfile(pid, {
+            title: "Você foi adicionado a uma tarefa",
+            body: taskData.title,
+            url: "/tarefas",
+          }).catch(() => {});
+        }
+      }
+
+      if (changes.length > 0) {
+        await supabase.from("task_edit_history").insert({
+          task_id: taskId,
+          changed_by: profile.id,
+          changes,
         });
       }
     }
 
-    if (changes.length > 0) {
-      await supabase.from("task_edit_history").insert({
-        task_id: taskId,
-        changed_by: profile.id,
-        changes,
-      });
-    }
+    revalidatePath("/tarefas");
+    revalidatePath("/calendario");
+    return { success: true };
+  } catch (e) {
+    console.error("[updateTask] erro não tratado:", e);
+    return { error: e instanceof Error ? e.message : "Erro inesperado ao salvar tarefa." };
   }
-
-  revalidatePath("/tarefas");
-  revalidatePath("/calendario");
-  return { success: true };
 }
 
 export async function deleteTask(taskId: string) {
@@ -315,11 +323,11 @@ export async function bulkUpdateAssignees(taskIds: string[], assigneeIds: string
 
     for (const pid of assigneeIds) {
       if (!oldProfileIds.has(pid) && pid !== profile?.id) {
-        void sendPushToProfile(pid, {
+        sendPushToProfile(pid, {
           title: "Você foi atribuído a uma tarefa",
           body: `${taskIds.length} tarefa${taskIds.length > 1 ? "s" : ""}`,
           url: "/tarefas",
-        });
+        }).catch(() => {});
       }
     }
   }
@@ -363,11 +371,11 @@ export async function advanceTaskStatus(taskId: string, currentStatus: TaskStatu
 
   for (const a of assigneesData ?? []) {
     if (a.profile_id !== profile?.id) {
-      void sendPushToProfile(a.profile_id, {
+      sendPushToProfile(a.profile_id, {
         title: "Status de tarefa atualizado",
         body: `Status mudou para: ${STATUS_LABELS[nextStatus] ?? nextStatus}`,
         url: "/tarefas",
-      });
+      }).catch(() => {});
     }
   }
 

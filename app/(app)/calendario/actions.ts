@@ -47,11 +47,11 @@ export async function createEvent(payload: EventPayload) {
     );
     for (const pid of participant_ids) {
       if (pid !== profile.id) {
-        void sendPushToProfile(pid, {
+        sendPushToProfile(pid, {
           title: "Novo evento criado",
           body: event.title,
           url: "/calendario",
-        });
+        }).catch(() => {});
       }
     }
   }
@@ -83,11 +83,11 @@ export async function updateEvent(eventId: string, payload: EventPayload) {
     );
     for (const pid of participant_ids) {
       if (pid !== profile?.id) {
-        void sendPushToProfile(pid, {
+        sendPushToProfile(pid, {
           title: "Evento atualizado",
           body: eventData.title,
           url: "/calendario",
-        });
+        }).catch(() => {});
       }
     }
   }
