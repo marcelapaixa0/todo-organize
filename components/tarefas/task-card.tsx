@@ -1,10 +1,15 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { isBefore, parseISO, startOfDay, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Task } from "@/lib/types";
 import { TASK_STATUS_LABELS, TASK_STATUS_COLORS, cn } from "@/lib/utils";
 import MemberAvatar from "@/components/member-avatar";
+
+const DELETE_ACTION_WIDTH = 88;
+const AUTO_DELETE_THRESHOLD = 180;
+const DRAG_THRESHOLD = 8;
 
 const PRIORITY_BAR: Record<string, string> = {
   high: "#ef4444",
@@ -23,6 +28,7 @@ type Props = {
   compact?: boolean;
   onEdit: () => void;
   onAdvanceStatus: () => void;
+  onDelete?: () => void;
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
@@ -33,10 +39,70 @@ export default function TaskCard({
   compact = false,
   onEdit,
   onAdvanceStatus,
+  onDelete,
   selectMode = false,
   selected = false,
   onToggleSelect,
 }: Props) {
+  const [dragX, setDragX] = useState(0);
+  const [openOffset, setOpenOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const touchRef = useRef<{
+    startX: number;
+    startY: number;
+    horizontal: boolean;
+    decided: boolean;
+    moved: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
+
+  function onTouchStart(e: React.TouchEvent) {
+    if (selectMode || !onDelete) return;
+    const t = e.touches[0];
+    touchRef.current = { startX: t.clientX, startY: t.clientY, horizontal: false, decided: false, moved: false };
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    const state = touchRef.current;
+    if (!state || selectMode || !onDelete) return;
+    const t = e.touches[0];
+    const dx = t.clientX - state.startX;
+    const dy = t.clientY - state.startY;
+
+    if (!state.decided) {
+      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+      state.decided = true;
+      state.horizontal = Math.abs(dx) > Math.abs(dy);
+      if (!state.horizontal) return;
+      setDragging(true);
+    }
+    if (!state.horizontal) return;
+
+    state.moved = true;
+    const next = Math.min(0, openOffset + dx);
+    setDragX(Math.max(next, -(AUTO_DELETE_THRESHOLD + 40)));
+  }
+
+  function onTouchEnd() {
+    const state = touchRef.current;
+    touchRef.current = null;
+    setDragging(false);
+    if (!state || !state.horizontal || !state.moved) return;
+    suppressClickRef.current = true;
+
+    if (dragX <= -AUTO_DELETE_THRESHOLD) {
+      setDragX(-400);
+      onDelete?.();
+      return;
+    }
+    if (dragX <= -DELETE_ACTION_WIDTH / 2) {
+      setOpenOffset(-DELETE_ACTION_WIDTH);
+      setDragX(-DELETE_ACTION_WIDTH);
+    } else {
+      setOpenOffset(0);
+      setDragX(0);
+    }
+  }
   const checkedCount = task.checklist_items?.filter((i) => i.checked).length ?? 0;
   const totalCount = task.checklist_items?.length ?? 0;
 
@@ -64,6 +130,15 @@ export default function TaskCard({
   };
 
   function handleClick() {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    if (openOffset !== 0) {
+      setOpenOffset(0);
+      setDragX(0);
+      return;
+    }
     if (selectMode) {
       onToggleSelect?.();
     } else {
@@ -71,16 +146,50 @@ export default function TaskCard({
     }
   }
 
+  function handleDeleteClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    setOpenOffset(0);
+    setDragX(0);
+    onDelete?.();
+  }
+
   return (
-    <div
-      onClick={handleClick}
-      style={inlineStyle()}
-      className={cn(
-        "w-full text-left bg-white rounded-xl border shadow-sm px-3 py-2.5 min-h-[72px] flex gap-2 active:scale-[0.99] transition-transform cursor-pointer overflow-hidden relative",
-        compact ? "items-center" : "items-start",
-        selected ? "border-indigo-400" : "border-slate-100"
+    <div className="relative overflow-hidden rounded-xl">
+      {onDelete && (
+        <div
+          className="absolute inset-y-0 right-0 flex items-stretch"
+          style={{ width: DELETE_ACTION_WIDTH }}
+        >
+          <button
+            onClick={handleDeleteClick}
+            className="w-full h-full bg-rose-500 flex flex-col items-center justify-center gap-0.5 text-white active:bg-rose-600"
+            title="Excluir"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span className="text-[10px] font-semibold">Excluir</span>
+          </button>
+        </div>
       )}
-    >
+      <div
+        onClick={handleClick}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          ...inlineStyle(),
+          transform: `translateX(${dragX}px)`,
+          transition: dragging ? "none" : "transform 200ms ease-out",
+          touchAction: onDelete ? "pan-y" : undefined,
+        }}
+        className={cn(
+          "w-full text-left bg-white rounded-xl border shadow-sm px-3 py-2.5 min-h-[72px] flex gap-2 cursor-pointer overflow-hidden relative",
+          compact ? "items-center" : "items-start",
+          selected ? "border-indigo-400" : "border-slate-100"
+        )}
+      >
       {/* Barra de prioridade */}
       <span
         className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl"
@@ -209,6 +318,7 @@ export default function TaskCard({
             </button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

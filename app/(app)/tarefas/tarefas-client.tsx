@@ -283,6 +283,10 @@ export default function TarefasClient({ tasks, categories, members, currentProfi
               compact={activeTab === "backlog"}
               onEdit={() => { setEditingTask(task); setShowTaskForm(true); }}
               onAdvanceStatus={() => tryAdvance(task)}
+              onDelete={() => {
+                startTransition(() => { void deleteTask(task.id); });
+                showToast("Tarefa excluída");
+              }}
               selectMode={selectMode}
               selected={selectedIds.has(task.id)}
               onToggleSelect={() => toggleSelect(task.id)}
